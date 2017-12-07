@@ -37,4 +37,4 @@ wget -c -nv https://github.com/AppImage/AppImageKit/releases/download/continuous
 
 # bundle libraries and build AppImage
 mkdir -p out/
-./squashfs-root/AppRun out/appdir/ cmake-continuous-"$ARCH".AppImage
+./squashfs-root/AppRun appdir/ out/cmake-continuous-"$ARCH".AppImage
