@@ -4,6 +4,10 @@ set -xe
 
 export ARCH="${ARCH:-$(uname -p)}"
 
+if [ "$ARCH" == "i386" ]; then
+    export ARCH=i686
+fi
+
 # build CMake
 ./configure --no-system-libs --parallel=$(nproc)
 make -j$(nproc)
