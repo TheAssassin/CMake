@@ -10,6 +10,7 @@ script:
   - chmod a+x linuxdeployqt-continuous-x86_64.AppImage
   - unset QTDIR; unset QT_PLUGIN_PATH ; unset LD_LIBRARY_PATH
   - export VERSION=$(git rev-parse --short HEAD) # linuxdeployqt uses this for naming the file
+  - mkdir -p appdir/usr/share/applications/
   - echo -e "[Desktop Entry]\nVersion=1.0\nName=CMake\nExec=cmake %f\nIcon=CMakeSetup\nTerminal=true\nX-MultipleArgs=false\nType=Application\nCategories=Development;\nStartupNotify=true\nMimeType=application/x-cmakecache;" > appdir/usr/share/applications/CMake.desktop
   - mkdir -p appdir/usr/share/icons/hicolor/{32x32,64x64,128x128}
   - cp Source/QtDialog/CMakeSetup32.png appdir/usr/share/icons/hicolor/32x32/CMakeSetup.png
