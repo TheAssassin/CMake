@@ -16,7 +16,7 @@ find appdir/
 
 # set up AppDir
 mkdir -p appdir/usr/share/applications/
-echo -e "[Desktop Entry]\nVersion=1.0\nName=CMake\nExec=cmake %f\nIcon=CMakeSetup\nTerminal=true\nX-MultipleArgs=false\nType=Application\nCategories=Development;\nStartupNotify=true\nMimeType=application/x-cmakecache;" > appdir/CMake.desktop
+echo -e "[Desktop Entry]\nVersion=1.0\nName=CMake\nExec=cmake %f\nIcon=CMakeSetup\nTerminal=true\nX-MultipleArgs=false\nType=Application\nCategories=Development;\nStartupNotify=true\nMimeType=application/x-cmakecache;" > appdir/cmake.desktop
 mkdir -p appdir/usr/share/icons/hicolor/{32x32,64x64,128x128}
 cp Source/QtDialog/CMakeSetup32.png appdir/usr/share/icons/hicolor/32x32/CMakeSetup.png
 cp Source/QtDialog/CMakeSetup64.png appdir/usr/share/icons/hicolor/64x64/CMakeSetup.png
