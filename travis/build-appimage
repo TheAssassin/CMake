@@ -9,9 +9,10 @@ if [ "$ARCH" == "i386" ]; then
 fi
 
 # build CMake
-./configure --no-system-libs --parallel=$(nproc)
+./configure --prefix=/usr --no-system-libs --parallel=$(nproc)
 make -j$(nproc)
-make INSTALL_ROOT=appdir -j$(nproc) install ; find appdir/
+make DESTDIR=appdir install
+find appdir/
 
 # set up AppDir
 mkdir -p appdir/usr/share/applications/
@@ -35,4 +36,4 @@ export VERSION=$(git rev-parse --short HEAD) # linuxdeployqt uses this for namin
 wget -c -nv https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-"$ARCH" -O appdir/AppRun
 
 # bundle libraries and build AppImage
-./squashfs-root/AppRun appdir/
+./squashfs-root/AppRun appdir/ cmake-continuous-"$ARCH".AppImage
