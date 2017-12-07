@@ -33,7 +33,7 @@ unset QTDIR; unset QT_PLUGIN_PATH ; unset LD_LIBRARY_PATH
 export VERSION=$(git rev-parse --short HEAD) # linuxdeployqt uses this for naming the file
 
 # set up AppRun
-wget -c -nv https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-"$ARCH" -O appdir/AppRun
+echo -e '#! /bin/sh\nexec "$APPDIR"/usr/bin/cmake "$@"' > appdir/AppRun
 chmod +x appdir/AppRun
 
 # bundle libraries and build AppImage
