@@ -4,8 +4,8 @@ set -xe
 
 export ARCH="${ARCH:-$(uname -m)}"
 
-if [ "$ARCH" == "i386" ]; then
-    export ARCH=i686
+if [ "$ARCH" == "i686" ]; then
+    export ARCH=i386
 fi
 
 # build CMake
