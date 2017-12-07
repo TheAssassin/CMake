@@ -20,6 +20,7 @@ mkdir -p appdir/usr/share/icons/hicolor/{32x32,64x64,128x128}
 cp Source/QtDialog/CMakeSetup32.png appdir/usr/share/icons/hicolor/32x32/CMakeSetup.png
 cp Source/QtDialog/CMakeSetup64.png appdir/usr/share/icons/hicolor/64x64/CMakeSetup.png
 cp Source/QtDialog/CMakeSetup128.png appdir/usr/share/icons/hicolor/128x128/CMakeSetup.png
+cp appdir/usr/share/icons/hicolor/128x128/CMakeSetup.png appdir/
 
 # install linuxdeployqt so that it won't require FUSE to run
 wget -c -nv "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-$ARCH.AppImage"
