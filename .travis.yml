@@ -2,29 +2,22 @@ language: cpp
 compiler: gcc
 dist: trusty
 
+sudo: required
+
+services:
+  - docker
+
+env:
+  - ARCH=x86_64
+  - ARCH=i686
+
 script:
-  - ./bootstrap
-  - make -j$(nproc)
-  - make INSTALL_ROOT=appdir -j$(nproc) install ; find appdir/
-  - wget -c -q "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
-  - chmod a+x linuxdeployqt-continuous-x86_64.AppImage
-  - unset QTDIR; unset QT_PLUGIN_PATH ; unset LD_LIBRARY_PATH
-  - export VERSION=$(git rev-parse --short HEAD) # linuxdeployqt uses this for naming the file
-  - mkdir -p appdir/usr/share/applications/
-  - echo -e "[Desktop Entry]\nVersion=1.0\nName=CMake\nExec=cmake %f\nIcon=CMakeSetup\nTerminal=true\nX-MultipleArgs=false\nType=Application\nCategories=Development;\nStartupNotify=true\nMimeType=application/x-cmakecache;" > appdir/usr/share/applications/CMake.desktop
-  - mkdir -p appdir/usr/share/icons/hicolor/{32x32,64x64,128x128}
-  - cp Source/QtDialog/CMakeSetup32.png appdir/usr/share/icons/hicolor/32x32/CMakeSetup.png
-  - cp Source/QtDialog/CMakeSetup64.png appdir/usr/share/icons/hicolor/64x64/CMakeSetup.png
-  - cp Source/QtDialog/CMakeSetup128.png appdir/usr/share/icons/hicolor/128x128/CMakeSetup.png
-  - ./linuxdeployqt-continuous-x86_64.AppImage --appimage-extract
-  - ./squashfs-root/AppRun appdir/usr/share/applications/CMake.desktop -bundle-non-qt-libs
-  - ./squashfs-root/AppRun appdir/usr/share/applications/CMake.desktop -appimage
+  - travis/build-appimages "$ARCH"
 
 after_success:
-  - find ./appdir -executable -type f -exec ldd {} \; | grep " => /usr" | cut -d " " -f 2-3 | sort | uniq
-  - # curl --upload-file ./CMake*.AppImage https://transfer.sh/CMake-git.$(git rev-parse --short HEAD)-x86_64.AppImage
+  - ls -lh out/*
   - wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
-  - bash upload.sh ./CMake*.AppImage*
+  - bash upload.sh out/CMake*.AppImage*
   
 branches:
   except:

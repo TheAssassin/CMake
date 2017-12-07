@@ -1,0 +1,22 @@
+#! /bin/bash
+
+set -e
+
+ARCH=$(uname -p)
+if [ "$ARCH" == "i686" ]; then
+    ARCH=i386
+fi
+
+# Install and enable EPEL and Devtoolset-4 by Software Collections
+# https://www.softwarecollections.org/en/scls/rhscl/devtoolset-4/
+if [ "$ARCH" == "x86_64" ]; then
+    sudo yum -y install centos-release-scl-rh epel-release
+    sudo yum -y install devtoolset-4-gcc.$ARCH devtoolset-4-gcc-c++.$ARCH
+fi
+
+sudo yum -y install epel-release
+sudo yum -y install git wget make binutils
+
+if [ "$ARCH" == "x86_64" ]; then
+    . /opt/rh/devtoolset-4/enable
+fi

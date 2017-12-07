@@ -1,0 +1,27 @@
+#! /bin/bash
+
+# build CMake
+./configure --no-system-libs
+make -j$(nproc)
+make INSTALL_ROOT=appdir -j$(nproc) install ; find appdir/
+
+# set up AppDir
+mkdir -p appdir/usr/share/applications/
+echo -e "[Desktop Entry]\nVersion=1.0\nName=CMake\nExec=cmake %f\nIcon=CMakeSetup\nTerminal=true\nX-MultipleArgs=false\nType=Application\nCategories=Development;\nStartupNotify=true\nMimeType=application/x-cmakecache;" > appdir/usr/share/applications/CMake.desktop
+mkdir -p appdir/usr/share/icons/hicolor/{32x32,64x64,128x128}
+cp Source/QtDialog/CMakeSetup32.png appdir/usr/share/icons/hicolor/32x32/CMakeSetup.png
+cp Source/QtDialog/CMakeSetup64.png appdir/usr/share/icons/hicolor/64x64/CMakeSetup.png
+cp Source/QtDialog/CMakeSetup128.png appdir/usr/share/icons/hicolor/128x128/CMakeSetup.png
+
+# install linuxdeployqt so that it won't require FUSE to run
+wget -c -q "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
+chmod a+x linuxdeployqt-continuous-x86_64.AppImage
+./linuxdeployqt-continuous-x86_64.AppImage --appimage-extract
+
+# prepare AppImage build
+unset QTDIR; unset QT_PLUGIN_PATH ; unset LD_LIBRARY_PATH
+export VERSION=$(git rev-parse --short HEAD) # linuxdeployqt uses this for naming the file
+
+# bundle libraries and build AppImage
+./squashfs-root/AppRun appdir/usr/share/applications/CMake.desktop -bundle-non-qt-libs
+./squashfs-root/AppRun appdir/usr/share/applications/CMake.desktop -appimage

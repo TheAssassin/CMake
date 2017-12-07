@@ -1,0 +1,31 @@
+#! /bin/bash
+
+set -e
+
+cd $(dirname "$0")/..
+
+mkdir -p out/
+
+if [ "$1" != "" ]; then
+    ARCHS="$@"
+else
+    ARCHS=(x86_64 i686)
+fi
+
+for ARCH in "${ARCHS[@]}"; do
+    case "$ARCH" in
+        x86_64)
+            DOCKER_IMAGE=library/centos:6.8
+            ;;
+        i686)
+            DOCKER_IMAGE=toopher/centos-i386:centos6
+            ;;
+        *)
+            echo "Unknown architecture: $ARCH"
+            exit 1
+            ;;
+    esac
+
+    docker run -it -e ARCH -v $(readlink -f out):/out -v $(readlink -f .):/AppImageKit -w /AppImageKit "$DOCKER_IMAGE" \
+        /bin/bash -c "yum -y install sudo && . travis/bootstrap-container && travis/build-appimage"
+done
