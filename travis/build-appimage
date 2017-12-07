@@ -2,7 +2,7 @@
 
 set -xe
 
-export ARCH="${ARCH:-$(uname -p)}"
+export ARCH="${ARCH:-$(uname -m)}"
 
 if [ "$ARCH" == "i386" ]; then
     export ARCH=i686
