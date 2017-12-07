@@ -1,5 +1,7 @@
 #! /bin/bash
 
+set -xe
+
 export ARCH="${ARCH:-$(uname -p)}"
 
 # build CMake
@@ -28,4 +30,4 @@ export VERSION=$(git rev-parse --short HEAD) # linuxdeployqt uses this for namin
 wget -c -nv https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-"$ARCH" -O appdir/AppRun
 
 # bundle libraries and build AppImage
-./squashfs-root/AppRun appdir/CMake.desktop
+./squashfs-root/AppRun appdir/
