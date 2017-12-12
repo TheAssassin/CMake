@@ -15,10 +15,10 @@ fi
 for ARCH in "${ARCHS[@]}"; do
     case "$ARCH" in
         x86_64)
-            DOCKER_IMAGE=debian
+            DOCKER_IMAGE=quay.io/appimage/appimagebuild
             ;;
         i686)
-            DOCKER_IMAGE=i386/debian
+            DOCKER_IMAGE=quay.io/appimage/appimagebuild-i386
             ;;
         *)
             echo "Unknown architecture: $ARCH"
@@ -27,5 +27,5 @@ for ARCH in "${ARCHS[@]}"; do
     esac
 
     docker run -it -e ARCH -v $(readlink -f out):/out -v $(readlink -f .):/AppImageKit -w /AppImageKit "$DOCKER_IMAGE" \
-        /bin/bash -c ". travis/bootstrap-container && travis/build-appimage"
+        /bin/bash travis/build-appimage
 done

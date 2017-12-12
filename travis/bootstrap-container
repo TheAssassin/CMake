@@ -1,5 +1,0 @@
-#! /bin/bash
-
-set -xe
-
-su -c "apt update && apt install -y git wget make gcc g++ sudo libglib2.0-0"
