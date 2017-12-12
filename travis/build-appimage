@@ -4,8 +4,8 @@ set -xe
 
 export ARCH="${ARCH:-$(uname -m)}"
 
-if [ "$ARCH" == "i686" ]; then
-    export ARCH=i386
+if [ "$ARCH" == "i386" ]; then
+    export ARCH=i686
 fi
 
 # generate first Makefile
@@ -13,10 +13,10 @@ fi
 
 # build first version of CMake so that build can be reconfigured
 make -j$(nproc) cmake
-make install
 
 # reconfigure CMake to make it a more "static" build and re-build
 cmake . -DCMAKE_BUILD_TYPE:STRING=Release \
+    -DBUILD_TESTING=OFF \
     -DCMAKE_C_STANDARD:STRING=11 \
     -DCMAKE_CXX_STANDARD:STRING=14 \
     -DCMAKE_C_FLAGS:STRING='-D_POSIX_C_SOURCE=199506L -D_POSIX_SOURCE=1 -D_SVID_SOURCE=1 -D_BSD_SOURCE=1' \
