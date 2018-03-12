@@ -108,7 +108,7 @@ private:
    * It would be tempting to convert a time_point to number of seconds by
    * using time_since_epoch(). Unfortunately the C++11 standard does not
    * specify what the epoch of the system_clock must be.
-   * Therefore we must assume it is an arbitary point in time. Instead of this
+   * Therefore we must assume it is an arbitrary point in time. Instead of this
    * method, it is recommended to convert it by means of the to_time_t method.
    */
   static std::time_t SafeContent(
@@ -131,6 +131,58 @@ private:
   bool ElementOpen;
   bool BreakAttrib;
   bool IsContent;
+};
+
+class cmXMLElement; // IWYU pragma: keep
+
+class cmXMLDocument
+{
+public:
+  cmXMLDocument(cmXMLWriter& xml)
+    : xmlwr(xml)
+  {
+    xmlwr.StartDocument();
+  }
+  ~cmXMLDocument() { xmlwr.EndDocument(); }
+private:
+  friend class cmXMLElement;
+  cmXMLWriter& xmlwr;
+};
+
+class cmXMLElement
+{
+public:
+  cmXMLElement(cmXMLWriter& xml, const char* tag)
+    : xmlwr(xml)
+  {
+    xmlwr.StartElement(tag);
+  }
+  cmXMLElement(cmXMLElement& par, const char* tag)
+    : xmlwr(par.xmlwr)
+  {
+    xmlwr.StartElement(tag);
+  }
+  cmXMLElement(cmXMLDocument& doc, const char* tag)
+    : xmlwr(doc.xmlwr)
+  {
+    xmlwr.StartElement(tag);
+  }
+  ~cmXMLElement() { xmlwr.EndElement(); }
+
+  template <typename T>
+  cmXMLElement& Attribute(const char* name, T const& value)
+  {
+    xmlwr.Attribute(name, value);
+    return *this;
+  }
+  template <typename T>
+  void Content(T const& content)
+  {
+    xmlwr.Content(content);
+  }
+
+private:
+  cmXMLWriter& xmlwr;
 };
 
 #endif

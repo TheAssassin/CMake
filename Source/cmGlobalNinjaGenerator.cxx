@@ -8,7 +8,6 @@
 #include "cmsys/FStream.hxx"
 #include <algorithm>
 #include <ctype.h>
-#include <functional>
 #include <iterator>
 #include <memory> // IWYU pragma: keep
 #include <sstream>
@@ -114,7 +113,7 @@ std::string cmGlobalNinjaGenerator::EncodeIdent(const std::string& ident,
                                                 std::ostream& vars)
 {
   if (std::find_if(ident.begin(), ident.end(),
-                   std::not1(std::ptr_fun(IsIdentChar))) != ident.end()) {
+                   [](char c) { return !IsIdentChar(c); }) != ident.end()) {
     static unsigned VarNum = 0;
     std::ostringstream names;
     names << "ident" << VarNum++;
@@ -871,7 +870,7 @@ std::string const& cmGlobalNinjaGenerator::ConvertToNinjaPath(
 
   cmLocalNinjaGenerator* ng =
     static_cast<cmLocalNinjaGenerator*>(this->LocalGenerators[0]);
-  const char* bin_dir = ng->GetState()->GetBinaryDirectory();
+  std::string const& bin_dir = ng->GetState()->GetBinaryDirectory();
   std::string convPath = ng->ConvertToRelativePath(bin_dir, path);
   convPath = this->NinjaOutputPath(convPath);
 #ifdef _WIN32
@@ -903,7 +902,7 @@ void cmGlobalNinjaGenerator::AddCXXCompileCommand(
   }
 
   std::string sourceFileName = sourceFile;
-  if (!cmSystemTools::FileIsFullPath(sourceFileName.c_str())) {
+  if (!cmSystemTools::FileIsFullPath(sourceFileName)) {
     sourceFileName = cmSystemTools::CollapseFullPath(
       sourceFileName, this->GetCMakeInstance()->GetHomeOutputDirectory());
   }
@@ -1224,11 +1223,13 @@ void cmGlobalNinjaGenerator::WriteUnknownExplicitDependencies(std::ostream& os)
     for (std::string const& file : files) {
       knownDependencies.insert(this->ConvertToNinjaPath(file));
     }
-    // get list files which are implicit dependencies as well and will be phony
-    // for rebuild manifest
-    std::vector<std::string> const& lf = lg->GetMakefile()->GetListFiles();
-    for (std::string const& j : lf) {
-      knownDependencies.insert(this->ConvertToNinjaPath(j));
+    if (!this->GlobalSettingIsOn("CMAKE_SUPPRESS_REGENERATION")) {
+      // get list files which are implicit dependencies as well and will be
+      // phony for rebuild manifest
+      std::vector<std::string> const& lf = lg->GetMakefile()->GetListFiles();
+      for (std::string const& j : lf) {
+        knownDependencies.insert(this->ConvertToNinjaPath(j));
+      }
     }
     std::vector<cmGeneratorExpressionEvaluationFile*> const& ef =
       lg->GetMakefile()->GetEvaluationFiles();
@@ -1336,6 +1337,9 @@ void cmGlobalNinjaGenerator::WriteTargetAll(std::ostream& os)
 
 void cmGlobalNinjaGenerator::WriteTargetRebuildManifest(std::ostream& os)
 {
+  if (this->GlobalSettingIsOn("CMAKE_SUPPRESS_REGENERATION")) {
+    return;
+  }
   cmLocalGenerator* lg = this->LocalGenerators[0];
 
   std::ostringstream cmd;
@@ -1385,8 +1389,14 @@ void cmGlobalNinjaGenerator::WriteTargetRebuildManifest(std::ostream& os)
                    /*explicitDeps=*/cmNinjaDeps(), implicitDeps,
                    /*orderOnlyDeps=*/cmNinjaDeps(), variables);
 
+  cmNinjaDeps missingInputs;
+  std::set_difference(std::make_move_iterator(implicitDeps.begin()),
+                      std::make_move_iterator(implicitDeps.end()),
+                      CustomCommandOutputs.begin(), CustomCommandOutputs.end(),
+                      std::back_inserter(missingInputs));
+
   this->WritePhonyBuild(os, "A missing CMake input file is not an error.",
-                        implicitDeps, cmNinjaDeps());
+                        missingInputs, cmNinjaDeps());
 }
 
 std::string cmGlobalNinjaGenerator::ninjaCmd() const
@@ -1728,7 +1738,7 @@ bool cmGlobalNinjaGenerator::WriteDyndepFile(
         info.Requires.push_back(ddi_require.asString());
       }
     }
-    objects.push_back(info);
+    objects.push_back(std::move(info));
   }
 
   // Map from module name to module file path, if known.

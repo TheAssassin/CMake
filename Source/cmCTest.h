@@ -5,6 +5,7 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
+#include "cmDuration.h"
 #include "cmProcessOutput.h"
 #include "cmsys/String.hxx"
 #include <chrono>
@@ -140,13 +141,10 @@ public:
 
   /** what is the configuraiton type, e.g. Debug, Release etc. */
   std::string const& GetConfigType();
-  std::chrono::duration<double> GetTimeOut() { return this->TimeOut; }
-  void SetTimeOut(std::chrono::duration<double> t) { this->TimeOut = t; }
+  cmDuration GetTimeOut() { return this->TimeOut; }
+  void SetTimeOut(cmDuration t) { this->TimeOut = t; }
 
-  std::chrono::duration<double> GetGlobalTimeout()
-  {
-    return this->GlobalTimeout;
-  }
+  cmDuration GetGlobalTimeout() { return this->GlobalTimeout; }
 
   /** how many test to run at the same time */
   int GetParallelLevel() { return this->ParallelLevel; }
@@ -206,7 +204,9 @@ public:
    * seconds if the user has set the variable CTEST_TIME_LIMIT. If that has
    * not been set it returns a very large duration.
    */
-  std::chrono::duration<double> GetRemainingTimeAllowed();
+  cmDuration GetRemainingTimeAllowed();
+
+  static cmDuration MaxDuration();
 
   /**
    * Open file in the output directory and set the stream
@@ -224,7 +224,10 @@ public:
   bool ShouldCompressTestOutput();
   bool CompressString(std::string& str);
 
-  std::string GetStopTime() { return this->StopTime; }
+  std::chrono::system_clock::time_point GetStopTime()
+  {
+    return this->StopTime;
+  }
   void SetStopTime(std::string const& time);
 
   /** Used for parallel ctest job scheduling */
@@ -253,8 +256,7 @@ public:
   bool RunCommand(std::vector<std::string> const& args, std::string* stdOut,
                   std::string* stdErr, int* retVal = nullptr,
                   const char* dir = nullptr,
-                  std::chrono::duration<double> timeout =
-                    std::chrono::duration<double>::zero(),
+                  cmDuration timeout = cmDuration::zero(),
                   Encoding encoding = cmProcessOutput::Auto);
 
   /**
@@ -274,8 +276,7 @@ public:
    * and retVal is return value or exception.
    */
   int RunMakeCommand(const char* command, std::string& output, int* retVal,
-                     const char* dir, std::chrono::duration<double> timeout,
-                     std::ostream& ofs,
+                     const char* dir, cmDuration timeout, std::ostream& ofs,
                      Encoding encoding = cmProcessOutput::Auto);
 
   /** Return the current tag */
@@ -322,7 +323,7 @@ public:
    * environment variables are restored to their previous values.
    */
   int RunTest(std::vector<const char*> args, std::string* output, int* retVal,
-              std::ostream* logfile, std::chrono::duration<double> testTimeOut,
+              std::ostream* logfile, cmDuration testTimeOut,
               std::vector<std::string>* environment,
               Encoding encoding = cmProcessOutput::Auto);
 
@@ -346,7 +347,7 @@ public:
                                               const std::string& cmake_var,
                                               bool suppress = false);
 
-  /** Make string safe to be send as an URL */
+  /** Make string safe to be sent as a URL */
   static std::string MakeURLSafe(const std::string&);
 
   /** Decode a URL to the original string.  */
@@ -427,9 +428,6 @@ public:
   void SetFailover(bool failover) { this->Failover = failover; }
   bool GetFailover() { return this->Failover; }
 
-  void SetBatchJobs(bool batch = true) { this->BatchJobs = batch; }
-  bool GetBatchJobs() { return this->BatchJobs; }
-
   bool GetVerbose() { return this->Verbose; }
   bool GetExtraVerbose() { return this->ExtraVerbose; }
 
@@ -460,13 +458,14 @@ public:
   void GenerateSubprojectsOutput(cmXMLWriter& xml);
   std::vector<std::string> GetLabelsForSubprojects();
 
+  void SetRunCurrentScript(bool value);
+
 private:
   int RepeatTests;
   bool RepeatUntilFail;
   std::string ConfigType;
   std::string ScheduleType;
-  std::string StopTime;
-  bool NextDayStopTime;
+  std::chrono::system_clock::time_point StopTime;
   bool Verbose;
   bool ExtraVerbose;
   bool ProduceXML;
@@ -475,15 +474,12 @@ private:
   bool UseHTTP10;
   bool PrintLabels;
   bool Failover;
-  bool BatchJobs;
 
   bool ForceNewCTestProcess;
 
   bool RunConfigurationScript;
 
   int GenerateNotesFile(const char* files);
-
-  void DetermineNextDayStop();
 
   // these are helper classes
   typedef std::map<std::string, cmCTestGenericHandler*> t_TestingHandlers;
@@ -510,11 +506,9 @@ private:
   int TestModel;
   std::string SpecificTrack;
 
-  std::chrono::duration<double> TimeOut;
+  cmDuration TimeOut;
 
-  std::chrono::duration<double> GlobalTimeout;
-
-  std::chrono::duration<double> LastStopTimeout;
+  cmDuration GlobalTimeout;
 
   int MaxTestNameWidth;
 

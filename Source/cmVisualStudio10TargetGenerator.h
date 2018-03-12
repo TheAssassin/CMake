@@ -7,6 +7,7 @@
 
 #include <iosfwd>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -24,6 +25,8 @@ class cmVisualStudioGeneratorOptions;
 
 class cmVisualStudio10TargetGenerator
 {
+  CM_DISABLE_COPY(cmVisualStudio10TargetGenerator)
+
 public:
   cmVisualStudio10TargetGenerator(cmGeneratorTarget* target,
                                   cmGlobalVisualStudio10Generator* gg);
@@ -51,8 +54,11 @@ private:
   };
 
   std::string ConvertPath(std::string const& path, bool forceRelative);
-  static void ConvertToWindowsSlash(std::string& s);
   void WriteString(const char* line, int indentLevel);
+  void WriteElem(const char* tag, const char* val, int indentLevel);
+  void WriteElem(const char* tag, std::string const& val, int indentLevel);
+  void WriteElemEscapeXML(const char* tag, std::string const& val,
+                          int indentLevel);
   void WriteProjectConfigurations();
   void WriteProjectConfigurationValues();
   void WriteMSToolConfigurationValues(std::string const& config);
@@ -90,18 +96,18 @@ private:
   void WriteTargetSpecificReferences();
   void WriteTargetsFileReferences();
 
+  std::vector<std::string> GetIncludes(std::string const& config,
+                                       std::string const& lang) const;
+
   bool ComputeClOptions();
   bool ComputeClOptions(std::string const& configName);
-  void WriteClOptions(std::string const& config,
-                      std::vector<std::string> const& includes);
+  void WriteClOptions(std::string const& config);
   bool ComputeRcOptions();
   bool ComputeRcOptions(std::string const& config);
-  void WriteRCOptions(std::string const& config,
-                      std::vector<std::string> const& includes);
+  void WriteRCOptions(std::string const& config);
   bool ComputeCudaOptions();
   bool ComputeCudaOptions(std::string const& config);
-  void WriteCudaOptions(std::string const& config,
-                        std::vector<std::string> const& includes);
+  void WriteCudaOptions(std::string const& config);
 
   bool ComputeCudaLinkOptions();
   bool ComputeCudaLinkOptions(std::string const& config);
@@ -109,20 +115,17 @@ private:
 
   bool ComputeMasmOptions();
   bool ComputeMasmOptions(std::string const& config);
-  void WriteMasmOptions(std::string const& config,
-                        std::vector<std::string> const& includes);
+  void WriteMasmOptions(std::string const& config);
   bool ComputeNasmOptions();
   bool ComputeNasmOptions(std::string const& config);
-  void WriteNasmOptions(std::string const& config,
-                        std::vector<std::string> includes);
+  void WriteNasmOptions(std::string const& config);
 
   bool ComputeLinkOptions();
   bool ComputeLinkOptions(std::string const& config);
   bool ComputeLibOptions();
   bool ComputeLibOptions(std::string const& config);
   void WriteLinkOptions(std::string const& config);
-  void WriteMidlOptions(std::string const& config,
-                        std::vector<std::string> const& includes);
+  void WriteMidlOptions(std::string const& config);
   void WriteAntBuildOptions(std::string const& config);
   void OutputLinkIncremental(std::string const& configName);
   void WriteCustomRule(cmSourceFile const* source,
@@ -154,7 +157,7 @@ private:
   void WriteEvent(const char* name,
                   std::vector<cmCustomCommand> const& commands,
                   std::string const& configName);
-  void WriteGroupSources(const char* name, ToolSources const& sources,
+  void WriteGroupSources(std::string const& name, ToolSources const& sources,
                          std::vector<cmSourceGroup>&);
   void AddMissingSourceGroups(std::set<cmSourceGroup*>& groupsUsed,
                               const std::vector<cmSourceGroup>& allGroups);
@@ -172,7 +175,7 @@ private:
 
 private:
   typedef cmVisualStudioGeneratorOptions Options;
-  typedef std::map<std::string, Options*> OptionsMap;
+  typedef std::map<std::string, std::unique_ptr<Options>> OptionsMap;
   OptionsMap ClOptions;
   OptionsMap RcOptions;
   OptionsMap CudaOptions;
@@ -180,6 +183,7 @@ private:
   OptionsMap MasmOptions;
   OptionsMap NasmOptions;
   OptionsMap LinkOptions;
+  std::string LangForClCompile;
   std::string PathToProjectFile;
   std::string ProjectFileExtension;
   enum VsProjectType
@@ -190,19 +194,19 @@ private:
   bool InSourceBuild;
   std::vector<std::string> Configurations;
   std::vector<TargetsFileAndConfigs> TargetsFileAndConfigsVec;
-  cmGeneratorTarget* GeneratorTarget;
-  cmMakefile* Makefile;
-  std::string Platform;
-  std::string GUID;
-  std::string Name;
+  cmGeneratorTarget* const GeneratorTarget;
+  cmMakefile* const Makefile;
+  std::string const Platform;
+  std::string const Name;
+  std::string const GUID;
   bool MSTools;
   bool Managed;
   bool NsightTegra;
   int NsightTegraVersion[4];
   bool TargetCompileAsWinRT;
-  cmGlobalVisualStudio10Generator* GlobalGenerator;
+  cmGlobalVisualStudio10Generator* const GlobalGenerator;
   cmGeneratedFileStream* BuildFileStream;
-  cmLocalVisualStudio7Generator* LocalGenerator;
+  cmLocalVisualStudio7Generator* const LocalGenerator;
   std::set<cmSourceFile const*> SourcesVisited;
   std::set<std::string> CSharpCustomCommandNames;
   bool IsMissingFiles;

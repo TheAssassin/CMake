@@ -92,8 +92,8 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
   }
 
   // Get the file to write.
-  if (cmSystemTools::FileIsFullPath(fname.c_str())) {
-    if (!this->Makefile->CanIWriteThisFile(fname.c_str())) {
+  if (cmSystemTools::FileIsFullPath(fname)) {
+    if (!this->Makefile->CanIWriteThisFile(fname)) {
       std::ostringstream e;
       e << "FILE option given filename \"" << fname
         << "\" which is in the source tree.\n";
@@ -146,17 +146,6 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
       }
 
       if (cmTarget* target = gg->FindTarget(currentTarget)) {
-        if (target->GetType() == cmStateEnums::OBJECT_LIBRARY) {
-          std::string reason;
-          if (!this->Makefile->GetGlobalGenerator()
-                 ->HasKnownObjectFileLocation(&reason)) {
-            std::ostringstream e;
-            e << "given OBJECT library \"" << currentTarget
-              << "\" which may not be exported" << reason << ".";
-            this->SetError(e.str());
-            return false;
-          }
-        }
         if (target->GetType() == cmStateEnums::UTILITY) {
           this->SetError("given custom target \"" + currentTarget +
                          "\" which may not be exported.");
@@ -205,7 +194,7 @@ bool cmExportCommand::InitialPass(std::vector<std::string> const& args,
   std::vector<std::string> configurationTypes;
   this->Makefile->GetConfigurations(configurationTypes);
   if (configurationTypes.empty()) {
-    configurationTypes.push_back("");
+    configurationTypes.emplace_back();
   }
   for (std::string const& ct : configurationTypes) {
     ebfg->AddConfiguration(ct);
@@ -346,10 +335,10 @@ void cmExportCommand::StorePackageRegistryDir(std::string const& package,
   fname += "/.cmake/packages/";
   fname += package;
 #endif
-  cmSystemTools::MakeDirectory(fname.c_str());
+  cmSystemTools::MakeDirectory(fname);
   fname += "/";
   fname += hash;
-  if (!cmSystemTools::FileExists(fname.c_str())) {
+  if (!cmSystemTools::FileExists(fname)) {
     cmGeneratedFileStream entry(fname.c_str(), true);
     if (entry) {
       entry << content << "\n";

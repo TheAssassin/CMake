@@ -38,7 +38,21 @@ signatures that specify them.  The common options are:
 
 ``CONFIGURATIONS``
   Specify a list of build configurations for which the install rule
-  applies (Debug, Release, etc.).
+  applies (Debug, Release, etc.). Note that the values specified for
+  this option only apply to options listed AFTER the ``CONFIGURATIONS``
+  option. For example, to set separate install paths for the Debug and
+  Release configurations, do the following:
+
+  .. code-block:: cmake
+
+    install(TARGETS target
+            CONFIGURATIONS Debug
+            RUNTIME DESTINATION Debug/bin)
+    install(TARGETS target
+            CONFIGURATIONS Release
+            RUNTIME DESTINATION Release/bin)
+
+  Note that ``CONFIGURATIONS`` appears BEFORE ``RUNTIME DESTINATION``.
 
 ``COMPONENT``
   Specify an installation component name with which the install rule
@@ -168,6 +182,13 @@ The ``EXPORT`` option associates the installed target files with an
 export called ``<export-name>``.  It must appear before any ``RUNTIME``,
 ``LIBRARY``, ``ARCHIVE``, or ``OBJECTS`` options.  To actually install the
 export file itself, call ``install(EXPORT)``, documented below.
+
+:ref:`Interface Libraries` may be listed among the targets to install.
+They install no artifacts but will be included in an associated ``EXPORT``.
+If :ref:`Object Libraries` are listed but given no destination for their
+object files, they will be exported as :ref:`Interface Libraries`.
+This is sufficient to satisfy transitive usage requirements of other
+targets that link to the object libraries in their implementation.
 
 Installing a target with the :prop_tgt:`EXCLUDE_FROM_ALL` target property
 set to ``TRUE`` has undefined behavior.
@@ -347,7 +368,7 @@ included in the export but a target to which it links is not included
 the behavior is unspecified.
 
 In addition to cmake language files, the ``EXPORT_ANDROID_MK`` option maybe
-used to specifiy an export to the android ndk build system.  The Android
+used to specify an export to the android ndk build system.  The Android
 NDK supports the use of prebuilt libraries, both static and shared. This
 allows cmake to build the libraries of a project and make them available
 to an ndk build system complete with transitive dependencies, include flags

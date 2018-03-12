@@ -275,6 +275,62 @@ static const struct EqualNode : public cmGeneratorExpressionNode
   }
 } equalNode;
 
+static const struct InListNode : public cmGeneratorExpressionNode
+{
+  InListNode() {}
+
+  int NumExpectedParameters() const override { return 2; }
+
+  std::string Evaluate(
+    const std::vector<std::string>& parameters,
+    cmGeneratorExpressionContext* /*context*/,
+    const GeneratorExpressionContent* /*content*/,
+    cmGeneratorExpressionDAGChecker* /*dagChecker*/) const override
+  {
+    std::vector<std::string> values;
+    cmSystemTools::ExpandListArgument(parameters[1], values);
+    if (values.empty()) {
+      return "0";
+    }
+
+    return std::find(values.cbegin(), values.cend(), parameters.front()) ==
+        values.cend()
+      ? "0"
+      : "1";
+  }
+} inListNode;
+
+static const struct TargetExistsNode : public cmGeneratorExpressionNode
+{
+  TargetExistsNode() {}
+
+  int NumExpectedParameters() const override { return 1; }
+
+  std::string Evaluate(
+    const std::vector<std::string>& parameters,
+    cmGeneratorExpressionContext* context,
+    const GeneratorExpressionContent* content,
+    cmGeneratorExpressionDAGChecker* /*dagChecker*/) const override
+  {
+    if (parameters.size() != 1) {
+      reportError(context, content->GetOriginalExpression(),
+                  "$<TARGET_EXISTS:...> expression requires one parameter");
+      return std::string();
+    }
+
+    std::string targetName = parameters.front();
+    if (targetName.empty() ||
+        !cmGeneratorExpression::IsValidTargetName(targetName)) {
+      reportError(context, content->GetOriginalExpression(),
+                  "$<TARGET_EXISTS:tgt> expression requires a non-empty "
+                  "valid target name.");
+      return std::string();
+    }
+
+    return context->LG->GetMakefile()->FindTargetToUse(targetName) ? "1" : "0";
+  }
+} targetExistsNode;
+
 static const struct LowerCaseNode : public cmGeneratorExpressionNode
 {
   LowerCaseNode() {}
@@ -805,7 +861,7 @@ static const struct CompileLanguageNode : public cmGeneratorExpressionNode
     const std::vector<std::string>& parameters,
     cmGeneratorExpressionContext* context,
     const GeneratorExpressionContent* content,
-    cmGeneratorExpressionDAGChecker* dagChecker) const override
+    cmGeneratorExpressionDAGChecker* /*dagChecker*/) const override
   {
     if (context->Language.empty()) {
       reportError(
@@ -827,33 +883,14 @@ static const struct CompileLanguageNode : public cmGeneratorExpressionNode
       return std::string();
     }
     std::string genName = gg->GetName();
-    if (genName.find("Visual Studio") != std::string::npos) {
-      if (dagChecker && (dagChecker->EvaluatingCompileDefinitions() ||
-                         dagChecker->EvaluatingIncludeDirectories())) {
-        reportError(
-          context, content->GetOriginalExpression(),
-          "$<COMPILE_LANGUAGE:...> may only be used for COMPILE_OPTIONS "
-          "and file(GENERATE) with the Visual Studio generator.");
-        return std::string();
-      }
-    } else if (genName.find("Xcode") != std::string::npos) {
-      if (dagChecker && (dagChecker->EvaluatingCompileDefinitions() ||
-                         dagChecker->EvaluatingIncludeDirectories())) {
-        reportError(
-          context, content->GetOriginalExpression(),
-          "$<COMPILE_LANGUAGE:...> may only be used for COMPILE_OPTIONS "
-          "and file(GENERATE) with the Xcode generator.");
-        return std::string();
-      }
-    } else {
-      if (genName.find("Makefiles") == std::string::npos &&
-          genName.find("Ninja") == std::string::npos &&
-          genName.find("Watcom WMake") == std::string::npos) {
-        reportError(
-          context, content->GetOriginalExpression(),
-          "$<COMPILE_LANGUAGE:...> not supported for this generator.");
-        return std::string();
-      }
+    if (genName.find("Makefiles") == std::string::npos &&
+        genName.find("Ninja") == std::string::npos &&
+        genName.find("Visual Studio") == std::string::npos &&
+        genName.find("Xcode") == std::string::npos &&
+        genName.find("Watcom WMake") == std::string::npos) {
+      reportError(context, content->GetOriginalExpression(),
+                  "$<COMPILE_LANGUAGE:...> not supported for this generator.");
+      return std::string();
     }
     if (parameters.empty()) {
       return context->Language;
@@ -966,7 +1003,8 @@ static const struct TargetPropertyNode : public cmGeneratorExpressionNode
                       "Target name not supported.");
         return std::string();
       }
-      if (propertyName == "ALIASED_TARGET") {
+      static const std::string propALIASED_TARGET = "ALIASED_TARGET";
+      if (propertyName == propALIASED_TARGET) {
         if (context->LG->GetMakefile()->IsAlias(targetName)) {
           if (cmGeneratorTarget* tgt =
                 context->LG->FindGeneratorTargetToUse(targetName)) {
@@ -1093,8 +1131,7 @@ static const struct TargetPropertyNode : public cmGeneratorExpressionNode
 
     CM_FOR_EACH_TRANSITIVE_PROPERTY_NAME(POPULATE_INTERFACE_PROPERTY_NAME)
     // Note that the above macro terminates with an else
-    /* else */ if (cmHasLiteralPrefix(propertyName.c_str(),
-                                      "COMPILE_DEFINITIONS_")) {
+    /* else */ if (cmHasLiteralPrefix(propertyName, "COMPILE_DEFINITIONS_")) {
       cmPolicies::PolicyStatus polSt =
         context->LG->GetPolicyStatus(cmPolicies::CMP0043);
       if (polSt == cmPolicies::WARN || polSt == cmPolicies::OLD) {
@@ -1846,6 +1883,7 @@ const cmGeneratorExpressionNode* cmGeneratorExpressionNode::GetNode(
     nodeMap["TARGET_BUNDLE_CONTENT_DIR"] = &targetBundleContentDirNode;
     nodeMap["STREQUAL"] = &strEqualNode;
     nodeMap["EQUAL"] = &equalNode;
+    nodeMap["IN_LIST"] = &inListNode;
     nodeMap["LOWER_CASE"] = &lowerCaseNode;
     nodeMap["UPPER_CASE"] = &upperCaseNode;
     nodeMap["MAKE_C_IDENTIFIER"] = &makeCIdentifierNode;
@@ -1858,6 +1896,7 @@ const cmGeneratorExpressionNode* cmGeneratorExpressionNode::GetNode(
     nodeMap["TARGET_NAME"] = &targetNameNode;
     nodeMap["TARGET_OBJECTS"] = &targetObjectsNode;
     nodeMap["TARGET_POLICY"] = &targetPolicyNode;
+    nodeMap["TARGET_EXISTS"] = &targetExistsNode;
     nodeMap["BUILD_INTERFACE"] = &buildInterfaceNode;
     nodeMap["INSTALL_INTERFACE"] = &installInterfaceNode;
     nodeMap["INSTALL_PREFIX"] = &installPrefixNode;

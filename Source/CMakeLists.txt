@@ -131,6 +131,8 @@ set(SRCS
   LexerParser/cmListFileLexer.c
   LexerParser/cmListFileLexer.in.l
 
+  cmAffinity.cxx
+  cmAffinity.h
   cmArchiveWrite.cxx
   cmBase32.cxx
   cmCacheManager.cxx
@@ -313,8 +315,8 @@ set(SRCS
   cmQtAutoGen.h
   cmQtAutoGenerator.cxx
   cmQtAutoGenerator.h
-  cmQtAutoGeneratorInitializer.cxx
-  cmQtAutoGeneratorInitializer.h
+  cmQtAutoGenInitializer.cxx
+  cmQtAutoGenInitializer.h
   cmQtAutoGeneratorMocUic.cxx
   cmQtAutoGeneratorMocUic.h
   cmQtAutoGeneratorRcc.cxx
@@ -327,6 +329,7 @@ set(SRCS
   cmSourceFile.h
   cmSourceFileLocation.cxx
   cmSourceFileLocation.h
+  cmSourceFileLocationKind.h
   cmSourceGroup.cxx
   cmSourceGroup.h
   cmState.cxx
@@ -350,6 +353,7 @@ set(SRCS
   cmUuid.cxx
   cmUVHandlePtr.cxx
   cmUVHandlePtr.h
+  cmUVSignalHackRAII.h
   cmVariableWatch.cxx
   cmVariableWatch.h
   cmVersion.cxx
@@ -601,15 +605,13 @@ set(SRCS
   cm_codecvt.hxx
   cm_codecvt.cxx
   cm_thread.hxx
+
+  cmDuration.h
+  cmDuration.cxx
   )
 
 SET_PROPERTY(SOURCE cmProcessOutput.cxx APPEND PROPERTY COMPILE_DEFINITIONS
   KWSYS_ENCODING_DEFAULT_CODEPAGE=${KWSYS_ENCODING_DEFAULT_CODEPAGE})
-
-# Kdevelop only works on UNIX and not windows
-if(UNIX)
-  set(SRCS ${SRCS} cmGlobalKdevelopGenerator.cxx)
-endif()
 
 # Xcode only works on Apple
 if(APPLE)
@@ -765,6 +767,7 @@ target_link_libraries(CMakeLib cmsys
   ${CMAKE_LIBUV_LIBRARIES}
   ${CMAKE_LIBRHASH_LIBRARIES}
   ${CMake_KWIML_LIBRARIES}
+  ${CMAKE_THREAD_LIBS_INIT}
   )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "sparc")
@@ -802,7 +805,6 @@ include_directories(
 #
 set(CTEST_SRCS cmCTest.cxx
   CTest/cmProcess.cxx
-  CTest/cmCTestBatchTestHandler.cxx
   CTest/cmCTestBuildAndTestHandler.cxx
   CTest/cmCTestBuildCommand.cxx
   CTest/cmCTestBuildHandler.cxx

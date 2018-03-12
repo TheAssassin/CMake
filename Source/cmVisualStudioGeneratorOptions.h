@@ -86,8 +86,12 @@ public:
   void OutputPreprocessorDefinitions(std::ostream& fout, const char* prefix,
                                      const char* suffix,
                                      const std::string& lang);
+  void OutputAdditionalIncludeDirectories(std::ostream& fout,
+                                          const char* prefix,
+                                          const char* suffix,
+                                          const std::string& lang);
   void OutputFlagMap(std::ostream& fout, const char* indent);
-  void SetConfiguration(const char* config);
+  void SetConfiguration(const std::string& config);
 
 private:
   cmLocalVisualStudioGenerator* LocalGenerator;
@@ -103,7 +107,7 @@ private:
 
   std::string UnknownFlagField;
 
-  virtual void StoreUnknownFlag(const char* flag);
+  void StoreUnknownFlag(std::string const& flag) override;
 
   FlagValue TakeFlag(std::string const& key);
 };

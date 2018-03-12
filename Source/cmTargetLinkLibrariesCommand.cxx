@@ -94,16 +94,6 @@ bool cmTargetLinkLibrariesCommand::InitialPass(
     return true;
   }
 
-  // OBJECT libraries are not allowed on the LHS of the command.
-  if (this->Target->GetType() == cmStateEnums::OBJECT_LIBRARY) {
-    std::ostringstream e;
-    e << "Object library target \"" << args[0] << "\" "
-      << "may not link to anything.";
-    this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
-    cmSystemTools::SetFatalErrorOccured();
-    return true;
-  }
-
   // Having a UTILITY library on the LHS is a bug.
   if (this->Target->GetType() == cmStateEnums::UTILITY) {
     std::ostringstream e;
@@ -242,7 +232,7 @@ bool cmTargetLinkLibrariesCommand::InitialPass(
       // Lookup old-style cache entry if type is unspecified.  So if you
       // do a target_link_libraries(foo optimized bar) it will stay optimized
       // and not use the lookup.  As there may be the case where someone has
-      // specifed that a library is both debug and optimized.  (this check is
+      // specified that a library is both debug and optimized.  (this check is
       // only there for backwards compatibility when mixing projects built
       // with old versions of CMake and new)
       llt = GENERAL_LibraryType;
@@ -401,14 +391,15 @@ bool cmTargetLinkLibrariesCommand::HandleLibrary(const std::string& lib,
     if (tgt && (tgt->GetType() != cmStateEnums::STATIC_LIBRARY) &&
         (tgt->GetType() != cmStateEnums::SHARED_LIBRARY) &&
         (tgt->GetType() != cmStateEnums::UNKNOWN_LIBRARY) &&
+        (tgt->GetType() != cmStateEnums::OBJECT_LIBRARY) &&
         (tgt->GetType() != cmStateEnums::INTERFACE_LIBRARY) &&
         !tgt->IsExecutableWithExports()) {
       std::ostringstream e;
       e << "Target \"" << lib << "\" of type "
         << cmState::GetTargetTypeName(tgt->GetType())
         << " may not be linked into another target.  One may link only to "
-           "INTERFACE, STATIC or SHARED libraries, or to executables with the "
-           "ENABLE_EXPORTS property set.";
+           "INTERFACE, OBJECT, STATIC or SHARED libraries, or to executables "
+           "with the ENABLE_EXPORTS property set.";
       this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
     }
 

@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sched.h>
 
 #if defined(__APPLE__) && !TARGET_OS_IPHONE
 # include <crt_externs.h>
@@ -44,6 +45,16 @@ extern char **environ;
 # include <grp.h>
 #endif
 
+#ifndef CMAKE_BOOTSTRAP
+#if defined(__linux__)
+# define uv__cpu_set_t cpu_set_t
+#elif defined(__FreeBSD__)
+# include <sys/param.h>
+# include <sys/cpuset.h>
+# include <pthread_np.h>
+# define uv__cpu_set_t cpuset_t
+#endif
+#endif
 
 static void uv__chld(uv_signal_t* handle, int signum) {
   uv_process_t* process;
@@ -279,9 +290,20 @@ static void uv__process_child_init(const uv_process_options_t* options,
                                    int stdio_count,
                                    int (*pipes)[2],
                                    int error_fd) {
+  sigset_t set;
   int close_fd;
   int use_fd;
+  int err;
   int fd;
+  int n;
+#ifndef CMAKE_BOOTSTRAP
+#if defined(__linux__) || defined(__FreeBSD__)
+  int r;
+  int i;
+  int cpumask_size;
+  uv__cpu_set_t cpuset;
+#endif
+#endif
 
   if (options->flags & UV_PROCESS_DETACHED)
     setsid();
@@ -372,8 +394,55 @@ static void uv__process_child_init(const uv_process_options_t* options,
     _exit(127);
   }
 
+#ifndef CMAKE_BOOTSTRAP
+#if defined(__linux__) || defined(__FreeBSD__)
+  if (options->cpumask != NULL) {
+    cpumask_size = uv_cpumask_size();
+    assert(options->cpumask_size >= (size_t)cpumask_size);
+
+    CPU_ZERO(&cpuset);
+    for (i = 0; i < cpumask_size; ++i) {
+      if (options->cpumask[i]) {
+        CPU_SET(i, &cpuset);
+      }
+    }
+
+    r = -pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+    if (r != 0) {
+      uv__write_int(error_fd, r);
+      _exit(127);
+    }
+  }
+#endif
+#endif
+
   if (options->env != NULL) {
     environ = options->env;
+  }
+
+  /* Reset signal disposition.  Use a hard-coded limit because NSIG
+   * is not fixed on Linux: it's either 32, 34 or 64, depending on
+   * whether RT signals are enabled.  We are not allowed to touch
+   * RT signal handlers, glibc uses them internally.
+   */
+  for (n = 1; n < 32; n += 1) {
+    if (n == SIGKILL || n == SIGSTOP)
+      continue;  /* Can't be changed. */
+
+    if (SIG_ERR != signal(n, SIG_DFL))
+      continue;
+
+    uv__write_int(error_fd, -errno);
+    _exit(127);
+  }
+
+  /* Reset signal mask. */
+  sigemptyset(&set);
+  err = pthread_sigmask(SIG_SETMASK, &set, NULL);
+
+  if (err != 0) {
+    uv__write_int(error_fd, -err);
+    _exit(127);
   }
 
   execvp(options->file, options->args);
@@ -391,6 +460,7 @@ int uv_spawn(uv_loop_t* loop,
   return -ENOSYS;
 #else
   int signal_pipe[2] = { -1, -1 };
+  int pipes_storage[8][2];
   int (*pipes)[2];
   int stdio_count;
   ssize_t r;
@@ -399,6 +469,20 @@ int uv_spawn(uv_loop_t* loop,
   int exec_errorno;
   int i;
   int status;
+
+  if (options->cpumask != NULL) {
+#ifndef CMAKE_BOOTSTRAP
+#if defined(__linux__) || defined(__FreeBSD__)
+    if (options->cpumask_size < (size_t)uv_cpumask_size()) {
+      return UV_EINVAL;
+    }
+#else
+    return UV_ENOTSUP;
+#endif
+#else
+    return UV_ENOTSUP;
+#endif
+  }
 
   assert(options->file != NULL);
   assert(!(options->flags & ~(UV_PROCESS_DETACHED |
@@ -415,7 +499,10 @@ int uv_spawn(uv_loop_t* loop,
     stdio_count = 3;
 
   err = -ENOMEM;
-  pipes = uv__malloc(stdio_count * sizeof(*pipes));
+  pipes = pipes_storage;
+  if (stdio_count > (int) ARRAY_SIZE(pipes_storage))
+    pipes = uv__malloc(stdio_count * sizeof(*pipes));
+
   if (pipes == NULL)
     goto error;
 
@@ -520,7 +607,9 @@ int uv_spawn(uv_loop_t* loop,
   process->pid = pid;
   process->exit_cb = options->exit_cb;
 
-  uv__free(pipes);
+  if (pipes != pipes_storage)
+    uv__free(pipes);
+
   return exec_errorno;
 
 error:
@@ -534,7 +623,9 @@ error:
       if (pipes[i][1] != -1)
         uv__close_nocheckstdio(pipes[i][1]);
     }
-    uv__free(pipes);
+
+    if (pipes != pipes_storage)
+      uv__free(pipes);
   }
 
   return err;

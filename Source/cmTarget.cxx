@@ -23,6 +23,7 @@
 #include "cmProperty.h"
 #include "cmSourceFile.h"
 #include "cmSourceFileLocation.h"
+#include "cmSourceFileLocationKind.h"
 #include "cmState.h"
 #include "cmStateDirectory.h"
 #include "cmStateSnapshot.h"
@@ -113,15 +114,12 @@ const char* cmTargetPropertyComputer::GetSources<cmTarget>(
         }
         if (!noMessage) {
           e << "Target \"" << tgt->GetName()
-            << "\" contains "
-               "$<TARGET_OBJECTS> generator expression in its sources "
-               "list.  "
-               "This content was not previously part of the SOURCES "
-               "property "
-               "when that property was read at configure time.  Code "
-               "reading "
-               "that property needs to be adapted to ignore the generator "
-               "expression using the string(GENEX_STRIP) command.";
+            << "\" contains $<TARGET_OBJECTS> generator expression in its "
+               "sources list.  This content was not previously part of the "
+               "SOURCES property when that property was read at configure "
+               "time.  Code reading that property needs to be adapted to "
+               "ignore the generator expression using the string(GENEX_STRIP) "
+               "command.";
           messenger->IssueMessage(messageType, e.str(), context);
         }
         if (addContent) {
@@ -188,18 +186,10 @@ cmTarget::cmTarget(std::string const& name, cmStateEnums::TargetType type,
   this->ImportedGloballyVisible = vis == VisibilityImportedGlobally;
   this->BuildInterfaceIncludesAppended = false;
 
-  // only add dependency information for library targets
-  if (this->TargetTypeValue >= cmStateEnums::STATIC_LIBRARY &&
-      this->TargetTypeValue <= cmStateEnums::MODULE_LIBRARY) {
-    this->RecordDependencies = true;
-  } else {
-    this->RecordDependencies = false;
-  }
-
   // Check whether this is a DLL platform.
   this->DLLPlatform =
-    (this->Makefile->IsOn("WIN32") || this->Makefile->IsOn("CYGWIN") ||
-     this->Makefile->IsOn("MINGW"));
+    strcmp(this->Makefile->GetSafeDefinition("CMAKE_IMPORT_LIBRARY_SUFFIX"),
+           "") != 0;
 
   // Check whether we are targeting an Android platform.
   this->IsAndroid =
@@ -246,6 +236,7 @@ cmTarget::cmTarget(std::string const& name, cmStateEnums::TargetType type,
     this->SetPropertyDefault("AUTOMOC", nullptr);
     this->SetPropertyDefault("AUTOUIC", nullptr);
     this->SetPropertyDefault("AUTORCC", nullptr);
+    this->SetPropertyDefault("AUTOGEN_PARALLEL", nullptr);
     this->SetPropertyDefault("AUTOMOC_COMPILER_PREDEFINES", nullptr);
     this->SetPropertyDefault("AUTOMOC_DEPEND_FILTERS", nullptr);
     this->SetPropertyDefault("AUTOMOC_MACRO_NAMES", nullptr);
@@ -498,7 +489,7 @@ void cmTarget::AddSources(std::vector<std::string> const& srcs)
   }
   if (!srcFiles.empty()) {
     cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
-    this->Internal->SourceEntries.push_back(srcFiles);
+    this->Internal->SourceEntries.push_back(std::move(srcFiles));
     this->Internal->SourceBacktraces.push_back(lfbt);
   }
 }
@@ -507,7 +498,7 @@ std::string cmTarget::ProcessSourceItemCMP0049(const std::string& s)
 {
   std::string src = s;
 
-  // For backwards compatibility replace varibles in source names.
+  // For backwards compatibility replace variables in source names.
   // This should eventually be removed.
   this->Makefile->ExpandVariablesInString(src);
   if (src != s) {
@@ -606,7 +597,8 @@ public:
 
 cmSourceFile* cmTarget::AddSource(const std::string& src)
 {
-  cmSourceFileLocation sfl(this->Makefile, src);
+  cmSourceFileLocation sfl(this->Makefile, src,
+                           cmSourceFileLocationKind::Known);
   if (std::find_if(this->Internal->SourceEntries.begin(),
                    this->Internal->SourceEntries.end(),
                    TargetPropertyEntryFinder(sfl)) ==
@@ -618,7 +610,8 @@ cmSourceFile* cmTarget::AddSource(const std::string& src)
   if (cmGeneratorExpression::Find(src) != std::string::npos) {
     return nullptr;
   }
-  return this->Makefile->GetOrCreateSource(src);
+  return this->Makefile->GetOrCreateSource(src, false,
+                                           cmSourceFileLocationKind::Known);
 }
 
 void cmTarget::AddLinkDirectory(const std::string& d)
@@ -634,27 +627,11 @@ const std::vector<std::string>& cmTarget::GetLinkDirectories() const
   return this->LinkDirectories;
 }
 
-void cmTarget::ClearDependencyInformation(cmMakefile& mf,
-                                          const std::string& target)
+void cmTarget::ClearDependencyInformation(cmMakefile& mf)
 {
-  // Clear the dependencies. The cache variable must exist iff we are
-  // recording dependency information for this target.
-  std::string depname = target;
+  std::string depname = this->GetName();
   depname += "_LIB_DEPENDS";
-  if (this->RecordDependencies) {
-    mf.AddCacheDefinition(depname, "", "Dependencies for target",
-                          cmStateEnums::STATIC);
-  } else {
-    if (mf.GetDefinition(depname)) {
-      std::string message = "Target ";
-      message += target;
-      message += " has dependency information when it shouldn't.\n";
-      message += "Your cache is probably stale. Please remove the entry\n  ";
-      message += depname;
-      message += "\nfrom the cache.";
-      cmSystemTools::Error(message.c_str());
-    }
-  }
+  mf.RemoveCacheDefinition(depname);
 }
 
 std::string cmTarget::GetDebugGeneratorExpressions(
@@ -738,17 +715,20 @@ void cmTarget::AddLinkLibrary(cmMakefile& mf, const std::string& lib,
   }
 
   if (cmGeneratorExpression::Find(lib) != std::string::npos ||
-      (tgt && tgt->GetType() == cmStateEnums::INTERFACE_LIBRARY) ||
+      (tgt && (tgt->GetType() == cmStateEnums::INTERFACE_LIBRARY ||
+               tgt->GetType() == cmStateEnums::OBJECT_LIBRARY)) ||
       (this->Name == lib)) {
     return;
   }
 
-  cmTarget::LibraryID tmp;
-  tmp.first = lib;
-  tmp.second = llt;
-  this->OriginalLinkLibraries.push_back(tmp);
+  {
+    cmTarget::LibraryID tmp;
+    tmp.first = lib;
+    tmp.second = llt;
+    this->OriginalLinkLibraries.emplace_back(lib, llt);
+  }
 
-  // Add the explicit dependency information for this target. This is
+  // Add the explicit dependency information for libraries. This is
   // simply a set of libraries separated by ";". There should always
   // be a trailing ";". These library names are not canonical, in that
   // they may be "-framework x", "-ly", "/path/libz.a", etc.
@@ -756,7 +736,10 @@ void cmTarget::AddLinkLibrary(cmMakefile& mf, const std::string& lib,
   // may be purposefully duplicated to handle recursive dependencies,
   // and we removing one instance will break the link line. Duplicates
   // will be appropriately eliminated at emit time.
-  if (this->RecordDependencies) {
+  if (this->TargetTypeValue >= cmStateEnums::STATIC_LIBRARY &&
+      this->TargetTypeValue <= cmStateEnums::MODULE_LIBRARY &&
+      (this->GetPolicyStatusCMP0073() == cmPolicies::OLD ||
+       this->GetPolicyStatusCMP0073() == cmPolicies::WARN)) {
     std::string targetEntry = this->Name;
     targetEntry += "_LIB_DEPENDS";
     std::string dependencies;
@@ -855,39 +838,53 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
         this->Makefile->GetBacktrace())) {
     return;
   }
-  if (prop == "MANUALLY_ADDED_DEPENDENCIES") {
+#define MAKE_STATIC_PROP(PROP) static const std::string prop##PROP = #PROP
+  MAKE_STATIC_PROP(COMPILE_DEFINITIONS);
+  MAKE_STATIC_PROP(COMPILE_FEATURES);
+  MAKE_STATIC_PROP(COMPILE_OPTIONS);
+  MAKE_STATIC_PROP(CUDA_PTX_COMPILATION);
+  MAKE_STATIC_PROP(EXPORT_NAME);
+  MAKE_STATIC_PROP(IMPORTED_GLOBAL);
+  MAKE_STATIC_PROP(INCLUDE_DIRECTORIES);
+  MAKE_STATIC_PROP(LINK_LIBRARIES);
+  MAKE_STATIC_PROP(MANUALLY_ADDED_DEPENDENCIES);
+  MAKE_STATIC_PROP(NAME);
+  MAKE_STATIC_PROP(SOURCES);
+  MAKE_STATIC_PROP(TYPE);
+#undef MAKE_STATIC_PROP
+  if (prop == propMANUALLY_ADDED_DEPENDENCIES) {
     std::ostringstream e;
     e << "MANUALLY_ADDED_DEPENDENCIES property is read-only\n";
     this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
     return;
   }
-  if (prop == "NAME") {
+  if (prop == propNAME) {
     std::ostringstream e;
     e << "NAME property is read-only\n";
     this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
     return;
   }
-  if (prop == "TYPE") {
+  if (prop == propTYPE) {
     std::ostringstream e;
     e << "TYPE property is read-only\n";
     this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
     return;
   }
-  if (prop == "EXPORT_NAME" && this->IsImported()) {
+  if (prop == propEXPORT_NAME && this->IsImported()) {
     std::ostringstream e;
     e << "EXPORT_NAME property can't be set on imported targets (\""
       << this->Name << "\")\n";
     this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
     return;
   }
-  if (prop == "SOURCES" && this->IsImported()) {
+  if (prop == propSOURCES && this->IsImported()) {
     std::ostringstream e;
     e << "SOURCES property can't be set on imported targets (\"" << this->Name
       << "\")\n";
     this->Makefile->IssueMessage(cmake::FATAL_ERROR, e.str());
     return;
   }
-  if (prop == "IMPORTED_GLOBAL" && !this->IsImported()) {
+  if (prop == propIMPORTED_GLOBAL && !this->IsImported()) {
     std::ostringstream e;
     e << "IMPORTED_GLOBAL property can't be set on non-imported targets (\""
       << this->Name << "\")\n";
@@ -895,7 +892,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
     return;
   }
 
-  if (prop == "INCLUDE_DIRECTORIES") {
+  if (prop == propINCLUDE_DIRECTORIES) {
     this->Internal->IncludeDirectoriesEntries.clear();
     this->Internal->IncludeDirectoriesBacktraces.clear();
     if (value) {
@@ -903,7 +900,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
       cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
       this->Internal->IncludeDirectoriesBacktraces.push_back(lfbt);
     }
-  } else if (prop == "COMPILE_OPTIONS") {
+  } else if (prop == propCOMPILE_OPTIONS) {
     this->Internal->CompileOptionsEntries.clear();
     this->Internal->CompileOptionsBacktraces.clear();
     if (value) {
@@ -911,7 +908,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
       cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
       this->Internal->CompileOptionsBacktraces.push_back(lfbt);
     }
-  } else if (prop == "COMPILE_FEATURES") {
+  } else if (prop == propCOMPILE_FEATURES) {
     this->Internal->CompileFeaturesEntries.clear();
     this->Internal->CompileFeaturesBacktraces.clear();
     if (value) {
@@ -919,7 +916,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
       cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
       this->Internal->CompileFeaturesBacktraces.push_back(lfbt);
     }
-  } else if (prop == "COMPILE_DEFINITIONS") {
+  } else if (prop == propCOMPILE_DEFINITIONS) {
     this->Internal->CompileDefinitionsEntries.clear();
     this->Internal->CompileDefinitionsBacktraces.clear();
     if (value) {
@@ -927,7 +924,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
       cmListFileBacktrace lfbt = this->Makefile->GetBacktrace();
       this->Internal->CompileDefinitionsBacktraces.push_back(lfbt);
     }
-  } else if (prop == "LINK_LIBRARIES") {
+  } else if (prop == propLINK_LIBRARIES) {
     this->Internal->LinkImplementationPropertyEntries.clear();
     this->Internal->LinkImplementationPropertyBacktraces.clear();
     if (value) {
@@ -935,7 +932,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
       this->Internal->LinkImplementationPropertyEntries.push_back(value);
       this->Internal->LinkImplementationPropertyBacktraces.push_back(lfbt);
     }
-  } else if (prop == "SOURCES") {
+  } else if (prop == propSOURCES) {
     this->Internal->SourceEntries.clear();
     this->Internal->SourceBacktraces.clear();
     if (value) {
@@ -943,7 +940,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
       this->Internal->SourceEntries.push_back(value);
       this->Internal->SourceBacktraces.push_back(lfbt);
     }
-  } else if (prop == "IMPORTED_GLOBAL") {
+  } else if (prop == propIMPORTED_GLOBAL) {
     if (!cmSystemTools::IsOn(value)) {
       std::ostringstream e;
       e << "IMPORTED_GLOBAL property can't be set to FALSE on targets (\""
@@ -959,7 +956,7 @@ void cmTarget::SetProperty(const std::string& prop, const char* value)
   } else if (cmHasLiteralPrefix(prop, "IMPORTED_LIBNAME") &&
              !this->CheckImportedLibName(prop, value ? value : "")) {
     /* error was reported by check method */
-  } else if (prop == "CUDA_PTX_COMPILATION" &&
+  } else if (prop == propCUDA_PTX_COMPILATION &&
              this->GetType() != cmStateEnums::OBJECT_LIBRARY) {
     std::ostringstream e;
     e << "CUDA_PTX_COMPILATION property can only be applied to OBJECT "

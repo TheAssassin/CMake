@@ -5,16 +5,17 @@
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
-#include <chrono>
 #include <set>
 #include <stddef.h>
 #include <string>
 #include <vector>
 
 #include "cmCTestTestHandler.h"
+#include "cmDuration.h"
+#include "cmProcess.h" // IWYU pragma: keep (for unique_ptr)
 
 class cmCTest;
-class cmProcess;
+class cmCTestMultiProcessHandler;
 
 /** \class cmRunTest
  * \brief represents a single test to be run
@@ -24,8 +25,9 @@ class cmProcess;
 class cmCTestRunTest
 {
 public:
-  cmCTestRunTest(cmCTestTestHandler* handler);
-  ~cmCTestRunTest();
+  explicit cmCTestRunTest(cmCTestMultiProcessHandler& multiHandler);
+
+  ~cmCTestRunTest() = default;
 
   void SetNumberOfRuns(int n) { this->NumberOfRunsLeft = n; }
   void SetRunUntilFailOn() { this->RunUntilFail = true; }
@@ -50,15 +52,13 @@ public:
 
   std::string GetProcessOutput() { return this->ProcessOutput; }
 
-  bool IsStopTimePassed() { return this->StopTimePassed; }
-
   cmCTestTestHandler::cmCTestTestResult GetTestResults()
   {
     return this->TestResult;
   }
 
   // Read and store output.  Returns true if it must be called again.
-  bool CheckOutput();
+  void CheckOutput(std::string const& line);
 
   // Compresses the output, writing to CompressedOutput
   void CompressOutput();
@@ -74,15 +74,19 @@ public:
 
   bool StartAgain();
 
+  void StartFailure(std::string const& output);
+
+  cmCTest* GetCTest() const { return this->CTest; }
+
+  void FinalizeTest();
+
 private:
   bool NeedsToRerun();
   void DartProcessing();
   void ExeNotFound(std::string exe);
-  // Figures out a final timeout which is min(STOP_TIME, NOW+TIMEOUT)
-  std::chrono::duration<double> ResolveTimeout();
-  bool ForkProcess(std::chrono::duration<double> testTimeOut,
-                   bool explicitTimeout,
-                   std::vector<std::string>* environment);
+  bool ForkProcess(cmDuration testTimeOut, bool explicitTimeout,
+                   std::vector<std::string>* environment,
+                   std::vector<size_t>* affinity);
   void WriteLogOutputTop(size_t completed, size_t total);
   // Run post processing of the process output for MemCheck
   void MemCheckPostProcess();
@@ -91,26 +95,18 @@ private:
   // Pointer back to the "parent"; the handler that invoked this test run
   cmCTestTestHandler* TestHandler;
   cmCTest* CTest;
-  cmProcess* TestProcess;
-  // If the executable to run is ctest, don't create a new process;
-  // just instantiate a new cmTest.  (Can be disabled for a single test
-  // if this option is set to false.)
-  // bool OptimizeForCTest;
-
-  bool UsePrefixCommand;
-  std::string PrefixCommand;
-
+  std::unique_ptr<cmProcess> TestProcess;
   std::string ProcessOutput;
   std::string CompressedOutput;
   double CompressionRatio;
   // The test results
   cmCTestTestHandler::cmCTestTestResult TestResult;
+  cmCTestMultiProcessHandler& MultiTestHandler;
   int Index;
   std::set<std::string> FailedDependencies;
   std::string StartTime;
   std::string ActualCommand;
   std::vector<std::string> Arguments;
-  bool StopTimePassed;
   bool RunUntilFail;
   int NumberOfRunsLeft;
   bool RunAgain;
